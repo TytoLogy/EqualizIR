@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 04-Jan-2017 14:42:10
+% Last Modified by GUIDE v2.5 04-Jan-2017 15:40:34
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -116,11 +116,15 @@ function LoadCal_button_Callback(hObject, eventdata, handles) %#ok<*DEFNU>
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
-% EQ Save/Load
+% EQ Save/Load/Build
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
 function SaveEQ_button_Callback(hObject, eventdata, handles)
-%-------------------------------------------------------------------------
+	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
+	if fname ~= 0
+		EQ = handles.EQ; %#ok<NASGU>
+		save(fullfile(fpath, fname), 'EQ', '-MAT');
+	end
 %-------------------------------------------------------------------------
 function LoadEQ_button_Callback(hObject, eventdata, handles)
 	[fname, fpath] = uigetfile( '*.eq', ...
@@ -140,12 +144,73 @@ function LoadEQ_button_Callback(hObject, eventdata, handles)
 % 	SmoothCalCtrl_Callback(hObject, eventdata, handles);
 %-------------------------------------------------------------------------
 
+%-------------------------------------------------------------------------
+function BuildEQ_button_Callback(hObject, eventdata, handles)
+	%-----------------------------------------------
+	% check that calibration data have been loaded
+	%-----------------------------------------------
+	if isempty(handles.EQ.caldata)
+		error('%s: no caldata loaded!', mfilename)
+	end
+	%-----------------------------------------------
+	% get some parameters
+	%-----------------------------------------------	
+	% number of gain measurements (from calibration data)
+	NG = length(handles.EQ.caldata.freq);
+	% frequencies from calibration data
+	calfreqs = handles.EQ.caldata.freq;
+	% range of frequencies
+	fmin = calfreqs(1);
+	fmax = calfreqs(end);
+	%-----------------------------------------------	
+	% compute correction xfer function
+	%-----------------------------------------------	
+	% process caldata gain values to convert into correction factors
+	rawmags = handles.EQ.caldata.mag(1, :);
+	% smooth correction
+	smoothmags = sgolayfilt(raw_corr, 1, 9);
+	
+	% generate EQ curve according to selected method
+	mtype = upper(handles.EQ.EQMethod);
+	switch mtype
+		case 'BOOST'
+			% normalize by finding deviation from peak
+			peakmag = max(calmag);
+			Magnorm = peakmag - raw;		case 'ATTEN'
+			COMPMETHOD = 'ATTEN';
+		case 'COMPRESS'
+			% shift to compromise between boost and cut
+			maxdiff = max(smoothmags) - smoothmags;
+
+			midcorr = 0.5*(max(maxdiff) - min(maxdiff));
+			adj_corr = sm_corr - midcorr;
+		otherwise
+			fprintf('%s: unknown compensation method %s\n', ...
+																	mfilename, mtype);
+			fprintf('\tUsing default, BOOST method\n');
+			COMPMETHOD = 'BOOST';
+	end	
+	
+	
+	if strcmpi(handles.EQ.EQMethod, 'compress')
+
+	elseif	
+	% plot xfer function
+	figure(10)
+	fp = f * 0.001;
+	plot(fp, raw_corr, 'k', fp, sm_corr, 'r.-', fp, adj_corr, 'b.-')
+	legend({'raw correction', 'smoothed correction', 'balanced correction'})
+	xlabel('Frequency (kHz)');
+	ylabel('Gain (db)')
+	grid('on')
+
+	
+	
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
 % EQ settings
 %-------------------------------------------------------------------------
-
 %-------------------------------------------------------------------------
 function Fs_edit_Callback(hObject, eventdata, handles)
 	handles.EQ.Fs = read_ui_str(hObject, 'n');
@@ -215,3 +280,5 @@ function EQMethod_popup_CreateFcn(hObject, eventdata, handles)
 	end
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
+
+
