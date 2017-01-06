@@ -367,17 +367,13 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 			end
 			guidata(hObject, handles);
 		otherwise
-			error('%s: unsupported compensation method %s\n', ...
-															mfilename, handles.EQ.EQMethod);
+			errordlg(sprintf('unsupported compensation method %s\n', ...
+															handles.EQ.EQMethod));
+			return
 	end
 	% plot xfer function, storing handles to plots in handles.Corr_H
-	fp = calfreqs * 0.001;
-	handles.Corr_H = plotyy(handles.EQ_axes, ...
-				[fp', fp'], [handles.EQ.caldata.mag(1, :)', smoothmags'], ...
-				fp, handles.EQ.EQmags);
-	legend({'raw cal data', ...
-				'smoothed cal data', ...
-				sprintf('%s correction', lower(handles.EQ.EQMethod))});
+	plot(handles.EQ_axes, 0.001*calfreqs, handles.EQ.EQmags);
+	legend(sprintf('%s EQ', lower(handles.EQ.EQMethod)));
 	ylabel('Gain (db)')
 	grid('on')
 	box(handles.EQ_axes, 'off');
@@ -395,7 +391,8 @@ function SaveEQ_button_Callback(hObject, eventdata, handles)
 	% check to make sure EQ data exist...
 	if isempty(handles.EQ.G)
 		% if not, throw error
-		error('%s: cannot save EQ data - no data to save!', mfilename);
+		errordlg('cannot save EQ data - no data to save!');
+		return
 	end
 	% get filename and path
 	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
