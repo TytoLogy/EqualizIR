@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 06-Jan-2017 13:34:20
+% Last Modified by GUIDE v2.5 06-Jan-2017 14:46:46
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -249,8 +249,12 @@ function SmoothVal2_edit_Callback(hObject, eventdata, handles)
 	end
 	guidata(hObject, handles)
 %-------------------------------------------------------------------------
-function BuildCorrection_button_Callback(hObject, eventdata, handles)
+function BuildEQ_button_Callback(hObject, eventdata, handles)
+%---------------------------------------------------------------------
 % Builds the equalization curve from calibration data
+%	See compensate_signal.m in TytoLogy AudioToolbox for original
+%	implemenation of this code
+%---------------------------------------------------------------------
 	%-----------------------------------------------
 	% checks
 	%-----------------------------------------------
@@ -263,11 +267,10 @@ function BuildCorrection_button_Callback(hObject, eventdata, handles)
 	%-----------------------------------------------	
 	% frequencies from calibration data
 	calfreqs = handles.EQ.caldata.freq;
-	%-----------------------------------------------	
-	% compute correction xfer function
-	%-----------------------------------------------	
+	%---------------------------------------------------------------------
 	% pre-process caldata gain values to convert into correction factors
-	% smooth correction using golay filter or moving average
+	% -> smooth correction using golay filter or moving average
+	%---------------------------------------------------------------------
 	if strcmpi(handles.EQ.CalSmoothMethod, 'SAVGOL')
 		smoothmags = sgolayfilt(handles.EQ.caldata.mag(1, :), ...
 										handles.EQ.CalSmoothParameters{1}(1), ...
@@ -281,10 +284,20 @@ function BuildCorrection_button_Callback(hObject, eventdata, handles)
 	guidata(hObject, handles);
 	% plot smoothed values
 	hold(handles.Cal_axes, 'on');
-		plot(handles.Cal_axes, 0.001*calfreqs, smoothmags, 'b-');
+		plot(handles.Cal_axes, 0.001*calfreqs, smoothmags, 'r-');
 	hold(handles.Cal_axes, 'off');
+	legend(handles.Cal_axes, {'Raw', 'Smoothed'});
+	%---------------------------------------------------------------------
 	% generate EQ curve according to selected method
+	%---------------------------------------------------------------------
 	switch upper(handles.EQ.EQMethod)
+		%------------------------------------------------------------------------
+		% apply correction using BOOST method
+		%------------------------------------------------------------------------
+		% procedure:	find additive compensation values for frequency range 
+		%					for which there are calibration data and apply to FFT, 
+		%					then iFFT to get corrected version
+		%------------------------------------------------------------------------
 		case 'BOOST'
 			% find peak magnitude, then calculate equalization values
 			% by finding deviation from peak
@@ -295,6 +308,13 @@ function BuildCorrection_button_Callback(hObject, eventdata, handles)
 																handles.EQ.CorrectionLimit);
 			end
 			guidata(hObject, handles);
+		%------------------------------------------------------------------------
+		% apply correction using ATTEN method
+		%------------------------------------------------------------------------
+		% procedure:	find subtractive compensation values for frequency range 
+		%					for which there are calibration data and apply to FFT, 
+		%					then iFFT to get corrected version
+		%------------------------------------------------------------------------
 		case 'ATTEN'
 			% find lowest magnitude, then calculate equalization values
 			% by finding deviation from minimum
@@ -305,62 +325,54 @@ function BuildCorrection_button_Callback(hObject, eventdata, handles)
 																handles.EQ.CorrectionLimit);
 			end
 			guidata(hObject, handles);
+		%------------------------------------------------------------------------
+		% apply correction using COMPRESS method
+		%------------------------------------------------------------------------
+		% procedure:	find subtractive compensation values for frequency range 
+		%					for which there are calibration data and apply to FFT, 
+		%					then iFFT to get corrected version
+		%------------------------------------------------------------------------
+		% some assumptions:
+		% 					magnitude values are in ACTUAL, dB SPL range.  
+		% 						¡this algorithm blows up for negative magnitudes!
+		%------------------------------------------------------------------------
 		case 'COMPRESS'
 			% see if Middle or Target level is being used
 			if read_ui_val(handles.MiddleLevel_radiobutton)
 				%------------------------------------------------------
-				% Using Middle level as target
+				% Use Middle level as target
 				%  This is a compromise between boost and atten 
 				%  by finding middle of dB range
 				%------------------------------------------------------
-				
-				% OLD
-				%{
-				% compute difference between the max value and all values
-				maxdiff = max(smoothmags) - smoothmags;
-				% calculate middle value as target level
-				handles.EQ.TargetLevel = 0.5*(max(maxdiff) - min(maxdiff));
-				% and use this to compute equalization values
-				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags;
-				%}
-				
-				% NEW
-				% find max and min in magnitude spectrum
+					% find max and min in magnitude spectrum
 				maxmag = max(smoothmags);
 				minmag = min(smoothmags);
 				% compute middle value
 				midmag = ((maxmag - minmag) / 2) + minmag;
 				% normalize by finding deviation from middle level
-				handles.EQ.EQmags = midmag - smoothmags;
-
-				
-				
-				if handles.EQ.CorrectionLimit
-					handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
-																handles.EQ.CorrectionLimit);
-				end
-				guidata(hObject, handles);
+				handles.EQ.EQmags = midmag - smoothmags;			
 				% update GUI
 				update_ui_str(handles.MiddleLevel_text, handles.EQ.TargetLevel);
 			else
 				%------------------------------------------------------
-				% Using specified Target level to compute boost/atten
+				% Use specified Target level to compute boost/atten
 				%------------------------------------------------------
 				handles.EQ.TargetLevel = read_ui_val(handles.EQ.TargetLevel_edit);
 				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags;
-				if handles.EQ.CorrectionLimit
-					handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
-																handles.EQ.CorrectionLimit);
-				end
-				guidata(hObject, handles);
 			end
+			% Limit correction if specified
+			if handles.EQ.CorrectionLimit
+				handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
+															handles.EQ.CorrectionLimit);
+			end
+			guidata(hObject, handles);
 		otherwise
 			error('%s: unsupported compensation method %s\n', ...
 															mfilename, handles.EQ.EQMethod);
 	end
 	% plot xfer function, storing handles to plots in handles.Corr_H
 	fp = calfreqs * 0.001;
-	handles.Corr_H = plotyy(handles.Corr_axes, ...
+	handles.Corr_H = plotyy(handles.EQ_axes, ...
 				[fp', fp'], [handles.EQ.caldata.mag(1, :)', smoothmags'], ...
 				fp, handles.EQ.EQmags);
 	legend({'raw cal data', ...
@@ -368,8 +380,8 @@ function BuildCorrection_button_Callback(hObject, eventdata, handles)
 				sprintf('%s correction', lower(handles.EQ.EQMethod))});
 	ylabel('Gain (db)')
 	grid('on')
-	box(handles.Corr_axes, 'off');
-	set(handles.Corr_axes, 'XTickLabel', '');
+	box(handles.EQ_axes, 'off');
+	set(handles.EQ_axes, 'XTickLabel', '');
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
 
@@ -415,7 +427,7 @@ function LoadEQ_button_Callback(hObject, eventdata, handles)
 %-------------------------------------------------------------------------
 
 %-------------------------------------------------------------------------
-function BuildEQ_button_Callback(hObject, eventdata, handles)
+function BuildFilter_button_Callback(hObject, eventdata, handles)
 	%-----------------------------------------------
 	% checks
 	%-----------------------------------------------
@@ -712,5 +724,3 @@ function SmoothVal2_edit_CreateFcn(hObject, eventdata, handles)
 	end
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
-
-
