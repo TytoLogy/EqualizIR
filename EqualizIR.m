@@ -175,27 +175,7 @@ varargout{1} = handles.output;
 % Calibration Data Functions
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
-function LoadCal_button_Callback(hObject, eventdata, handles) %#ok<*DEFNU>
-% Load, plot calibration data
-	[fname, fpath] = uigetfile( {'*.cal'; '*_cal.mat'}, ...
-									'Load calibration data from file...');
-	if fname ~=0
-		handles.calfile = fullfile(fpath, fname);	
-		handles.EQ.caldata = load_headphone_cal(handles.calfile);
-		plot(handles.Cal_axes, ...
-				0.001*handles.EQ.caldata.freq, ...
-				handles.EQ.caldata.mag(1, :), '.-');
-		ylim(handles.Cal_axes, ...
-				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
-					1.1*max(handles.EQ.caldata.mag(1, :))]);
-		grid(handles.Cal_axes, 'on');
-		ylabel(handles.Cal_axes, 'dB (SPL)')
-		xlabel(handles.Cal_axes, 'Frequency (kHz)')
-		box(handles.Cal_axes, 'off');
-	end
-	guidata(hObject, handles);
-%-------------------------------------------------------------------------
-function SmoothCal_ctrl_Callback(hObject, eventdata, handles)
+function SmoothCal_ctrl_Callback(hObject, eventdata, handles) %#ok<*DEFNU>
 	% get value of smooth method
 	smoothmethod = read_ui_val(hObject);
 	switch(smoothmethod)
