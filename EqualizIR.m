@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 05-Jan-2017 16:51:56
+% Last Modified by GUIDE v2.5 06-Jan-2017 13:34:20
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -88,7 +88,7 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 	%-------------------------------------------------------------
 	handles.calfile = '';
 	handles.eqfile = '';
-	handles.EQ = struct(	'Fs', 100000, ...
+	handles.EQ = struct(	'Fs', 250000, ...
 								'NFFT', 1024, ...
 								'NZ', 10, ...
 								'NP', 20, ...
@@ -249,66 +249,20 @@ function SmoothVal2_edit_Callback(hObject, eventdata, handles)
 	end
 	guidata(hObject, handles)
 %-------------------------------------------------------------------------
-
-%-------------------------------------------------------------------------
-%-------------------------------------------------------------------------
-% EQ Save/Load/Build
-%-------------------------------------------------------------------------
-%-------------------------------------------------------------------------
-function SaveEQ_button_Callback(hObject, eventdata, handles)
-% saves EQ data to .eq file (MAT file format)
-	% check to make sure EQ data exist...
-	if isempty(handles.EQ.G)
-		% if not, throw error
-		error('%s: cannot save EQ data - no data to save!', mfilename);
-	end
-	% get filename and path
-	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
-	if fname ~= 0
-		% if user didn't hit cancel button, save EQ struct in mat file
-		EQ = handles.EQ; %#ok<NASGU>
-		save(fullfile(fpath, fname), 'EQ', '-MAT');
-	end
-%-------------------------------------------------------------------------
-function LoadEQ_button_Callback(hObject, eventdata, handles)
-% loads EQ data from .eq file (MAT file format)
-	[fname, fpath] = uigetfile( '*.eq', ...
-									'Load equalization data from file...');
-	if fname ~=0
-		handles.eqfile = fullfile(fpath, fname);
-		handles.EQ = load(handles.eqfile, '-MAT');
-		plot(handles.Cal_axes, ...
-				0.001*handles.EQ.caldata.freq, ...
-				handles.EQ.caldata.mag(1, :), '.-');
-		ylim(handles.Cal_axes, ...
-				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
-					1.1*max(handles.EQ.caldata.mag(1, :))]);
-		grid(handles.Cal_axes, 'on');
-		ylabel(handles.Cal_axes, 'dB (SPL)')
-		xlabel(handles.Cal_axes, 'Frequency (kHz)')
-	end
-	guidata(hObject, handles);
-% 	SmoothCalCtrl_Callback(hObject, eventdata, handles);
-%-------------------------------------------------------------------------
-
-%-------------------------------------------------------------------------
-function BuildEQ_button_Callback(hObject, eventdata, handles)
+function BuildCorrection_button_Callback(hObject, eventdata, handles)
+% Builds the equalization curve from calibration data
 	%-----------------------------------------------
-	% check that calibration data have been loaded
+	% checks
 	%-----------------------------------------------
+	%  see if calibration data have been loaded
 	if isempty(handles.EQ.caldata)
 		error('%s: no caldata loaded!', mfilename)
 	end
 	%-----------------------------------------------
 	% get some parameters
 	%-----------------------------------------------	
-	% number of gain measurements (from calibration data)
-	NG = length(handles.EQ.caldata.freq);
 	% frequencies from calibration data
 	calfreqs = handles.EQ.caldata.freq;
-	% range of frequencies
-	fmin = calfreqs(1);
-	fmax = calfreqs(end);
 	%-----------------------------------------------	
 	% compute correction xfer function
 	%-----------------------------------------------	
@@ -354,14 +308,33 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 		case 'COMPRESS'
 			% see if Middle or Target level is being used
 			if read_ui_val(handles.MiddleLevel_radiobutton)
-				% compromise between boost and atten by finding middle of 
-				% dB range
+				%------------------------------------------------------
+				% Using Middle level as target
+				%  This is a compromise between boost and atten 
+				%  by finding middle of dB range
+				%------------------------------------------------------
+				
+				% OLD
+				%{
 				% compute difference between the max value and all values
 				maxdiff = max(smoothmags) - smoothmags;
 				% calculate middle value as target level
 				handles.EQ.TargetLevel = 0.5*(max(maxdiff) - min(maxdiff));
 				% and use this to compute equalization values
 				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags;
+				%}
+				
+				% NEW
+				% find max and min in magnitude spectrum
+				maxmag = max(smoothmags);
+				minmag = min(smoothmags);
+				% compute middle value
+				midmag = ((maxmag - minmag) / 2) + minmag;
+				% normalize by finding deviation from middle level
+				handles.EQ.EQmags = midmag - smoothmags;
+
+				
+				
 				if handles.EQ.CorrectionLimit
 					handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
 																handles.EQ.CorrectionLimit);
@@ -370,7 +343,9 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 				% update GUI
 				update_ui_str(handles.MiddleLevel_text, handles.EQ.TargetLevel);
 			else
-				% use target level to compute boost/atten
+				%------------------------------------------------------
+				% Using specified Target level to compute boost/atten
+				%------------------------------------------------------
 				handles.EQ.TargetLevel = read_ui_val(handles.EQ.TargetLevel_edit);
 				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags;
 				if handles.EQ.CorrectionLimit
@@ -383,10 +358,9 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 			error('%s: unsupported compensation method %s\n', ...
 															mfilename, handles.EQ.EQMethod);
 	end
-	
-	% plot xfer function
+	% plot xfer function, storing handles to plots in handles.Corr_H
 	fp = calfreqs * 0.001;
-	plotyy(handles.Corr_axes, ...
+	handles.Corr_H = plotyy(handles.Corr_axes, ...
 				[fp', fp'], [handles.EQ.caldata.mag(1, :)', smoothmags'], ...
 				fp, handles.EQ.EQmags);
 	legend({'raw cal data', ...
@@ -396,6 +370,144 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 	grid('on')
 	box(handles.Corr_axes, 'off');
 	set(handles.Corr_axes, 'XTickLabel', '');
+	guidata(hObject, handles);
+%-------------------------------------------------------------------------
+
+%-------------------------------------------------------------------------
+%-------------------------------------------------------------------------
+% EQ Save/Load/Build
+%-------------------------------------------------------------------------
+%-------------------------------------------------------------------------
+function SaveEQ_button_Callback(hObject, eventdata, handles)
+% saves EQ data to .eq file (MAT file format)
+	% check to make sure EQ data exist...
+	if isempty(handles.EQ.G)
+		% if not, throw error
+		error('%s: cannot save EQ data - no data to save!', mfilename);
+	end
+	% get filename and path
+	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
+	if fname ~= 0
+		% if user didn't hit cancel button, save EQ struct in mat file
+		EQ = handles.EQ; %#ok<NASGU>
+		save(fullfile(fpath, fname), 'EQ', '-MAT');
+	end
+%-------------------------------------------------------------------------
+function LoadEQ_button_Callback(hObject, eventdata, handles)
+% loads EQ data from .eq file (MAT file format)
+	[fname, fpath] = uigetfile( '*.eq', ...
+									'Load equalization data from file...');
+	if fname ~=0
+		handles.eqfile = fullfile(fpath, fname);
+		handles.EQ = load(handles.eqfile, '-MAT');
+		plot(handles.Cal_axes, ...
+				0.001*handles.EQ.caldata.freq, ...
+				handles.EQ.caldata.mag(1, :), '.-');
+		ylim(handles.Cal_axes, ...
+				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
+					1.1*max(handles.EQ.caldata.mag(1, :))]);
+		grid(handles.Cal_axes, 'on');
+		ylabel(handles.Cal_axes, 'dB (SPL)')
+		xlabel(handles.Cal_axes, 'Frequency (kHz)')
+	end
+	guidata(hObject, handles);
+% 	SmoothCalCtrl_Callback(hObject, eventdata, handles);
+%-------------------------------------------------------------------------
+
+%-------------------------------------------------------------------------
+function BuildEQ_button_Callback(hObject, eventdata, handles)
+	%-----------------------------------------------
+	% checks
+	%-----------------------------------------------
+	%  see if calibration data have been loaded
+	if isempty(handles.EQ.caldata)
+		errordlg('No Calibration Data are Loaded!');
+		return
+	end
+	% see if eq curve is built
+	if isempty(handles.EQ.EQmags)
+		errordlg('No Correction data yet - try pressing Build Correction!')
+		return
+	end	
+	% make sure Fs is going to work with calibration data
+	if handles.EQ.Fs/2 < handles.EQ.caldata.freq(end)
+		error(['%s: Signal Nyquist frequency (%d) is lower than ' ...
+				 'max calibration frequency (%d)'], ...
+				 handles.EQ.Fs/2, handles.EQ.caldata.freq(end));
+	end
+	%-----------------------------------------------
+	% get some parameters
+	%-----------------------------------------------	
+	% frequencies from calibration data
+	calfreqs = handles.EQ.caldata.freq;
+	%------------------------------------------------------------------------
+	% some final tidying and ...
+	%------------------------------------------------------------------------
+	% Gain measurements - make a working copy of EQ curve
+	Gdb = handles.EQ.EQmags;
+	% number of gain measurements (from calibration data)
+	NG = length(Gdb);
+	% Must decide on a dc value.
+	% Either use what is known to be true or pick something "maximally
+	% smooth".  Here we do a simple linear extrapolation:
+	dc_amp = Gdb(1) - calfreqs(1)*(Gdb(2)-Gdb(1))/(calfreqs(2)-calfreqs(1));
+	% JOS: (original code)
+	% Must also decide on a value at half the sampling rate.
+	% Use either a realistic estimate or something "maximally smooth".
+	% Here we do a simple linear extrapolation. While zeroing it
+	% is appealing, we do not want any zeros on the unit circle here.
+	Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
+	% SJS:
+	% one problem with this approach is that if (1) the max value of measured
+	% frequencies (f(NG)) is far below fs/2, and if (2) the  value of the last
+	% slope, Gdb_last_slope, is positive, that final value for nyq_amp is
+	% going to "blow up" positively.
+	% --- a check on this .... ----
+	% try checking the last slope value and, if positive, do something else...
+	if Gdb_last_slope > 0
+		nadjpts = 10;
+		adjindx = (NG-nadjpts+1):NG;
+		x = linspace(0, 1, nadjpts);
+		% use neg. parabolic to calculate values
+		y = 1 - .15*x.^2;
+		% plot details of correction factor
+		figure(2)
+		plot(x, Gdb(adjindx), 'o')
+		hold on
+			plot(x, y, '.k');
+			plot(x, y.*Gdb(adjindx), '.r')
+		hold off
+		grid
+		% apply correction factor...
+		Gdb(adjindx) = y.*Gdb(adjindx);
+		Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
+		% ...and plot corrected gain
+		hold(handles.Corr_H(2), 'on');
+		plot(handles.Corr_H(2), calfreqs, Gdb, 'g.-')
+		hold(handles.Corr_H(2), 'off');
+	end
+	% now, compute amplitude at Nyquist freq
+	nyq_amp = Gdb(NG) + Gdb_last_slope * (handles.EQ.Fs/2 - calfreqs(NG));
+	handles.EQ.G = [dc_amp, Gdb, nyq_amp]; 
+	handles.EQ.f = [0,calfreqs,handles.EQ.Fs/2];
+	guidata(hObject, handles);
+	%------------------------------------------------------------------------
+	% ...compute filter
+	%------------------------------------------------------------------------
+	figh = figure(20);
+	[handles.EQ.B, handles.EQ.A, handles.EQ.Finv] = ...
+				josInv(	handles.EQ.f, ...
+							handles.EQ.G, ...
+							handles.EQ.NZ, ...
+							handles.EQ.NP, ...
+							handles.EQ.NFFT, ...
+							handles.EQ.Fs, ...
+							'ShowPlot', figh, ...
+							'InterpMethod', handles.EQ.InterpMethod);
+	guidata(hObject, handles);
+	% mean squared error between desired and computed
+	MSE = mean((handles.EQ.Finv.Gdbk' - db(handles.EQ.Finv.Hh)).^2);
+	fprintf('MSE = %.4f\n', MSE);
 %-------------------------------------------------------------------------
 
 
@@ -532,6 +644,11 @@ function magsout = limit_correction(magsin, corrlimit)
 	magsout(magsout > corrlimit) = corrlimit;
 	magsout(magsout < -corrlimit) = -corrlimit;
 %-------------------------------------------------------------------------
+function Debug_button_Callback(hObject, eventdata, handles)
+	keyboard
+%-------------------------------------------------------------------------
+
+%-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
 
 %-------------------------------------------------------------------------
@@ -595,3 +712,5 @@ function SmoothVal2_edit_CreateFcn(hObject, eventdata, handles)
 	end
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
+
+

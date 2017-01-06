@@ -309,6 +309,7 @@ if ishandle(PLOTS)
  	axis square
 	xlim([-1.1 1.1]);
 	ylim([-1.1 1.1]);
+	title('Poles, Zeros')
 	drawnow
 end
 
