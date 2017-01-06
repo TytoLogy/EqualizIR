@@ -252,8 +252,9 @@ wk = 2*pi*fk/fs;
 % assign optional output
 %------------------------------------------------------------------------
 if nargout == 3
-	varargout{1} = struct('Wh', Wh, 'Hh', Hh, ...
-									'Fk', fk, 'Gdbk', Gdbfk, 's', s);	
+	varargout{1} = struct(	'Wh', Wh, 'Hh', Hh, ...
+									'Fk', fk, 'Gdbfk', Gdbfk, 'Smpp', Smpp, ...
+									's', s);	
 end
 
 %------------------------------------------------------------------------
@@ -268,16 +269,17 @@ if ~ishandle(PLOTS)
 		PLOTS = 'n';
 	end
 end
+% if handle, plot!
 if ishandle(PLOTS)
+	% switch to or create figure
 	figure(PLOTS);
-
 	% frequency max, min
 	fmin = min(fe);
 	fmax = max(fe);
 
 	% plot measured and fit magnitude response
 	subplot(411)
-	semilogx(fk(2:end-1),Gdbfk(2:end-1),'-k'); 
+	semilogx(fk(2:end-1),Gdbfk(2:end-1),'.k'); 
 	grid('on'); 
 	axis([fmin/2 fmax*2 min(Gdbfk) 1.1*max(Gdbfk)]);
 	hold('on'); 
@@ -285,8 +287,9 @@ if ishandle(PLOTS)
 	hold('off');
 	xlabel('Frequency (Hz)');
 	ylabel('Magnitude (dB)');
-	title(['Measured and Extrapolated/Interpolated/Resampled ',...
+	title(['Extrapolated/Interpolated/Resampled and Desired',...
 			 'Amplitude Response']);
+	legend({'extra/inter/resampled', 'desired'});
 
 	% plot desired and created compensation curve
 	subplot(412);
@@ -296,14 +299,16 @@ if ishandle(PLOTS)
 	title('Correction Frequency Response');
 	legend('Desired','Filter');
 
+	% plot impulse response
 	subplot(413);
-	plot(s, '-k');
+	plot(s(1:Nfft/2), '-k');
 	grid('on');
 	title('Impulse Response');
 	xlabel('Samples');
 	ylabel('Amplitude');
-	xlim([0 Nfft+1]);
+	xlim([0 (0.5*Nfft)+1]);
 
+	% plot poles and zeros
 	subplot(414)
 	zplane(B, A);
  	axis square

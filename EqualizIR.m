@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 06-Jan-2017 14:46:46
+% Last Modified by GUIDE v2.5 06-Jan-2017 16:52:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -373,11 +373,11 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 	end
 	% plot xfer function, storing handles to plots in handles.Corr_H
 	plot(handles.EQ_axes, 0.001*calfreqs, handles.EQ.EQmags);
-	legend(sprintf('%s EQ', lower(handles.EQ.EQMethod)));
-	ylabel('Gain (db)')
-	grid('on')
+	legend(handles.EQ_axes, sprintf('%s EQ', lower(handles.EQ.EQMethod)));
+	ylabel(handles.EQ_axes, 'Gain (db)')
+	grid(handles.EQ_axes, 'on')
 	box(handles.EQ_axes, 'off');
-	set(handles.EQ_axes, 'XTickLabel', '');
+% 	set(handles.EQ_axes, 'XTickLabel', '');
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
 
@@ -487,13 +487,15 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 			plot(x, y.*Gdb(adjindx), '.r')
 		hold off
 		grid
+		legend({'original', 'adjusted'});
 		% apply correction factor...
 		Gdb(adjindx) = y.*Gdb(adjindx);
 		Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
-		% ...and plot corrected gain
-		hold(handles.Corr_H(2), 'on');
-		plot(handles.Corr_H(2), calfreqs, Gdb, 'g.-')
-		hold(handles.Corr_H(2), 'off');
+		% ...and plot corrected gain in EQ_axes
+		hold(handles.EQ_axes, 'on');
+			plot(handles.EQ_axes, 0.001*calfreqs, Gdb, 'g.-')
+		hold(handles.EQ_axes, 'off');
+		legend(handles.EQ_axes, {'original', 'adjusted'});
 	end
 	% now, compute amplitude at Nyquist freq
 	nyq_amp = Gdb(NG) + Gdb_last_slope * (handles.EQ.Fs/2 - calfreqs(NG));
@@ -503,7 +505,6 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	%------------------------------------------------------------------------
 	% ...compute filter
 	%------------------------------------------------------------------------
-	figh = figure(20);
 	[handles.EQ.B, handles.EQ.A, handles.EQ.Finv] = ...
 				josInv(	handles.EQ.f, ...
 							handles.EQ.G, ...
@@ -511,12 +512,58 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 							handles.EQ.NP, ...
 							handles.EQ.NFFT, ...
 							handles.EQ.Fs, ...
-							'ShowPlot', figh, ...
+							'ShowPlot', 'n', ...
 							'InterpMethod', handles.EQ.InterpMethod);
 	guidata(hObject, handles);
 	% mean squared error between desired and computed
-	MSE = mean((handles.EQ.Finv.Gdbk' - db(handles.EQ.Finv.Hh)).^2);
+	MSE = mean((handles.EQ.Finv.Gdbfk' - db(handles.EQ.Finv.Hh)).^2);
 	fprintf('MSE = %.4f\n', MSE);
+	
+	%------------------------------------------------------------------------
+	% plots
+	%------------------------------------------------------------------------
+	% plot Filter
+	plot(	handles.Filter_axes, ...
+				handles.EQ.Finv.Fk, ...
+				db([handles.EQ.Finv.Smpp(:), handles.EQ.Finv.Hh(:)]));
+	grid(handles.Filter_axes, 'on');
+	xlabel(handles.Filter_axes, 'Frequency (Hz)');
+	ylabel(handles.Filter_axes, 'Correction Magnitude (dB)');
+	title('Correction Frequency Response');
+	legend(handles.Filter_axes, 'Desired','Filter');
+	xlim(handles.Filter_axes, [min(handles.EQ.Finv.Fk) max(handles.EQ.Finv.Fk)]);
+
+	% plot measured and fit magnitude response
+	semilogx(handles.Desired_axes, ...
+						handles.EQ.Finv.Fk(2:end-1), ...
+						handles.EQ.Finv.Gdbfk(2:end-1),'.k'); 
+	hold(handles.Desired_axes, 'on'); 
+		semilogx(handles.Desired_axes, handles.EQ.f, handles.EQ.G, 'o');
+	hold(handles.Desired_axes, 'off');
+	grid(handles.Desired_axes, 'on');
+	axis(handles.Desired_axes, ...
+				[	min(handles.EQ.f)/2 max(handles.EQ.f)*2 ...
+					min(handles.EQ.Finv.Gdbfk) 1.1*max(handles.EQ.Finv.Gdbfk)]);
+	xlabel(handles.Desired_axes, 'Frequency (Hz)');
+	ylabel(handles.Desired_axes, 'Magnitude (dB)');
+	legend(handles.Desired_axes, {'extra/inter/resampled', 'desired'});
+	
+	% plot impulse response
+	plot(handles.IR_axes, handles.EQ.Finv.s(1:handles.EQ.NFFT/2), '-k');
+	grid(handles.IR_axes, 'on');
+	title(handles.IR_axes, 'Impulse Response');
+	xlabel(handles.IR_axes, 'Samples');
+	ylabel(handles.IR_axes, 'Amplitude');
+	xlim(handles.IR_axes, [0 (0.5*handles.EQ.NFFT)+1]);
+
+	% plot poles and zeros
+	zplane(handles.EQ.B, handles.EQ.A, handles.PZ_axes);
+%  	axis(handles.PZ_axes, 'square')
+	xlim(handles.PZ_axes, [-1.1 1.1]);
+	ylim(handles.PZ_axes, [-1.1 1.1]);
+	title(handles.PZ_axes, 'Poles, Zeros')
+	legend(handles.PZ_axes, {'zeros', 'poles'})
+	
 %-------------------------------------------------------------------------
 
 
@@ -720,4 +767,27 @@ function SmoothVal2_edit_CreateFcn(hObject, eventdata, handles)
 		 set(hObject,'BackgroundColor','white');
 	end
 %-------------------------------------------------------------------------
+%-------------------------------------------------------------------------
+
+
+% --------------------------------------------------------------------
+function LoadCal_menu_Callback(hObject, eventdata, handles)
+% Load, plot calibration data
+	[fname, fpath] = uigetfile( {'*.cal'; '*_cal.mat'}, ...
+									'Load calibration data from file...');
+	if fname ~=0
+		handles.calfile = fullfile(fpath, fname);	
+		handles.EQ.caldata = load_headphone_cal(handles.calfile);
+		plot(handles.Cal_axes, ...
+				0.001*handles.EQ.caldata.freq, ...
+				handles.EQ.caldata.mag(1, :), '.-');
+		ylim(handles.Cal_axes, ...
+				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
+					1.1*max(handles.EQ.caldata.mag(1, :))]);
+		grid(handles.Cal_axes, 'on');
+		ylabel(handles.Cal_axes, 'dB (SPL)')
+		xlabel(handles.Cal_axes, 'Frequency (kHz)')
+		box(handles.Cal_axes, 'off');
+	end
+	guidata(hObject, handles);
 %-------------------------------------------------------------------------
