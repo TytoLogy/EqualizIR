@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 06-Jan-2017 16:52:51
+% Last Modified by GUIDE v2.5 06-Jan-2017 17:22:55
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -54,37 +54,37 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 	% Create internal data and defaults in handles struct
 	%
 	% Program-defined fields of handles struct:
-% 		calfile	name of calibration data file
-% 		eqfile	name of equalization data file
-% 		EQ		EQualization data struct:
-% 			Fs			sample rate for impulse response, filter (samples/sec)
-% 							¡¡this must match that of sound files to be processed!!!
-% 			NFFT		length of impulse response (samples)
-% 			NZ			number of zeros for filter
-% 			NP			number of poles for filter
-% 			InterpMethod	Interpolation method used to complete correction
-% 								spectrum (sent as argument to josInv.m function)
-% 			EQMethod			method used to compute equalization factor
-% 									{'COMPRESS', 'ATTEN', 'BOOST'}
-% 			TargetLevel		level used as target by COMPRESS method
-% 			caldata	calibration data struct
-%			CalSmoothMethod	method used to smooth calibration data before
-% 									generating filter
-% 										{'SAVGOL', 'MOVAVG'}
-% 			CalSmoothParameters	settings for smoothing method
-% 										For SAVGOL, [order, framesize]
-% 										For MOVAVG, [window size]
-% 			EQmags	equalization values calculated by EQ method
-% 							¡calculated at frequencies specified in caldata struct, 
-% 							 NOT at frequencies in f, G arrays - those are calculated
-% 							 separately using the EQmags!
-%			CorrectionLimit	limit to correction value in dB. if 0, no limit!
-% 			f			[DC:Fs/2] frequencies for full equalization spectrum
-% 			G			[DC:Fs/2] Gain values for equalization
-% 			A, B		denominator, numerator filter coefficients that can be 
-% 						used with the filter or filtfilt MATLAB commands to apply
-% 						the equalization to sound arrays
-% 			Finv		invert struct from josInv output
+	% 		calfile	name of calibration data file
+	% 		eqfile	name of equalization data file
+	% 		EQ		EQualization data struct:
+	% 			Fs			sample rate for impulse response, filter (samples/sec)
+	% 							¡¡this must match that of sound files to be processed!!!
+	% 			NFFT		length of impulse response (samples)
+	% 			NZ			number of zeros for filter
+	% 			NP			number of poles for filter
+	% 			InterpMethod	Interpolation method used to complete correction
+	% 								spectrum (sent as argument to josInv.m function)
+	% 			EQMethod			method used to compute equalization factor
+	% 									{'COMPRESS', 'ATTEN', 'BOOST'}
+	% 			TargetLevel		level used as target by COMPRESS method
+	% 			caldata	calibration data struct
+	%			CalSmoothMethod	method used to smooth calibration data before
+	% 									generating filter
+	% 										{'SAVGOL', 'MOVAVG'}
+	% 			CalSmoothParameters	settings for smoothing method
+	% 										For SAVGOL, [order, framesize]
+	% 										For MOVAVG, [window size]
+	% 			EQmags	equalization values calculated by EQ method
+	% 							¡calculated at frequencies specified in caldata struct, 
+	% 							 NOT at frequencies in f, G arrays - those are calculated
+	% 							 separately using the EQmags!
+	%			CorrectionLimit	limit to correction value in dB. if 0, no limit!
+	% 			f			[DC:Fs/2] frequencies for full equalization spectrum
+	% 			G			[DC:Fs/2] Gain values for equalization
+	% 			A, B		denominator, numerator filter coefficients that can be 
+	% 						used with the filter or filtfilt MATLAB commands to apply
+	% 						the equalization to sound arrays
+	% 			Finv		invert struct from josInv output
 	%-------------------------------------------------------------
 	handles.calfile = '';
 	handles.eqfile = '';
@@ -363,46 +363,10 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
-% EQ Save/Load/Build
+% EQ Build
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
-function SaveEQ_button_Callback(hObject, eventdata, handles)
-% saves EQ data to .eq file (MAT file format)
-	% check to make sure EQ data exist...
-	if isempty(handles.EQ.G)
-		% if not, throw error
-		errordlg('cannot save EQ data - no data to save!');
-		return
-	end
-	% get filename and path
-	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
-	if fname ~= 0
-		% if user didn't hit cancel button, save EQ struct in mat file
-		EQ = handles.EQ; %#ok<NASGU>
-		save(fullfile(fpath, fname), 'EQ', '-MAT');
-	end
 %-------------------------------------------------------------------------
-function LoadEQ_button_Callback(hObject, eventdata, handles)
-% loads EQ data from .eq file (MAT file format)
-	[fname, fpath] = uigetfile( '*.eq', ...
-									'Load equalization data from file...');
-	if fname ~=0
-		handles.eqfile = fullfile(fpath, fname);
-		handles.EQ = load(handles.eqfile, '-MAT');
-		plot(handles.Cal_axes, ...
-				0.001*handles.EQ.caldata.freq, ...
-				handles.EQ.caldata.mag(1, :), '.-');
-		ylim(handles.Cal_axes, ...
-				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
-					1.1*max(handles.EQ.caldata.mag(1, :))]);
-		grid(handles.Cal_axes, 'on');
-		ylabel(handles.Cal_axes, 'dB (SPL)')
-		xlabel(handles.Cal_axes, 'Frequency (kHz)')
-	end
-	guidata(hObject, handles);
-% 	SmoothCalCtrl_Callback(hObject, eventdata, handles);
-%-------------------------------------------------------------------------
-
 %-------------------------------------------------------------------------
 function BuildFilter_button_Callback(hObject, eventdata, handles)
 	%-----------------------------------------------
@@ -459,6 +423,16 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 		x = linspace(0, 1, nadjpts);
 		% use neg. parabolic to calculate values
 		y = 1 - .15*x.^2;
+		% apply correction factor...
+		Gdb(adjindx) = y.*Gdb(adjindx);
+		Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
+		% ...and plot corrected gain in EQ_axes
+		hold(handles.EQ_axes, 'on');
+			plot(handles.EQ_axes, 0.001*calfreqs, Gdb, 'g.-')
+		hold(handles.EQ_axes, 'off');
+		legend(handles.EQ_axes, {'original', 'adjusted'});
+		%{
+		% FOR DEBUGGING
 		% plot details of correction factor
 		figure(2)
 		plot(x, Gdb(adjindx), 'o')
@@ -468,14 +442,7 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 		hold off
 		grid
 		legend({'original', 'adjusted'});
-		% apply correction factor...
-		Gdb(adjindx) = y.*Gdb(adjindx);
-		Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
-		% ...and plot corrected gain in EQ_axes
-		hold(handles.EQ_axes, 'on');
-			plot(handles.EQ_axes, 0.001*calfreqs, Gdb, 'g.-')
-		hold(handles.EQ_axes, 'off');
-		legend(handles.EQ_axes, {'original', 'adjusted'});
+		%}
 	end
 	% now, compute amplitude at Nyquist freq
 	nyq_amp = Gdb(NG) + Gdb_last_slope * (handles.EQ.Fs/2 - calfreqs(NG));
@@ -497,7 +464,7 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	guidata(hObject, handles);
 	% mean squared error between desired and computed
 	MSE = mean((handles.EQ.Finv.Gdbfk' - db(handles.EQ.Finv.Hh)).^2);
-	fprintf('MSE = %.4f\n', MSE);
+	update_ui_str(handles.MSE_text, sprintf('%.4f', MSE));
 	
 	%------------------------------------------------------------------------
 	% plots
@@ -509,7 +476,6 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	grid(handles.Filter_axes, 'on');
 	xlabel(handles.Filter_axes, 'Frequency (Hz)');
 	ylabel(handles.Filter_axes, 'Correction Magnitude (dB)');
-	title('Correction Frequency Response');
 	legend(handles.Filter_axes, 'Desired','Filter');
 	xlim(handles.Filter_axes, [min(handles.EQ.Finv.Fk) max(handles.EQ.Finv.Fk)]);
 
@@ -531,7 +497,6 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	% plot impulse response
 	plot(handles.IR_axes, handles.EQ.Finv.s(1:handles.EQ.NFFT/2), '-k');
 	grid(handles.IR_axes, 'on');
-	title(handles.IR_axes, 'Impulse Response');
 	xlabel(handles.IR_axes, 'Samples');
 	ylabel(handles.IR_axes, 'Amplitude');
 	xlim(handles.IR_axes, [0 (0.5*handles.EQ.NFFT)+1]);
@@ -541,7 +506,6 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 %  	axis(handles.PZ_axes, 'square')
 	xlim(handles.PZ_axes, [-1.1 1.1]);
 	ylim(handles.PZ_axes, [-1.1 1.1]);
-	title(handles.PZ_axes, 'Poles, Zeros')
 	legend(handles.PZ_axes, {'zeros', 'poles'})
 	
 %-------------------------------------------------------------------------
@@ -686,6 +650,90 @@ function Debug_button_Callback(hObject, eventdata, handles)
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
+% MENU CALLBACKS
+%-------------------------------------------------------------------------
+%-------------------------------------------------------------------------
+function LoadCal_menu_Callback(hObject, eventdata, handles)
+%---------------------------------------------
+% Load, plot calibration data
+%---------------------------------------------
+	[fname, fpath] = uigetfile( {'*.cal'; '*_cal.mat'}, ...
+									'Load calibration data from file...');
+	if fname ~=0
+		handles.calfile = fullfile(fpath, fname);	
+		handles.EQ.caldata = load_headphone_cal(handles.calfile);
+		plot(handles.Cal_axes, ...
+				0.001*handles.EQ.caldata.freq, ...
+				handles.EQ.caldata.mag(1, :), '.-');
+		ylim(handles.Cal_axes, ...
+				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
+					1.1*max(handles.EQ.caldata.mag(1, :))]);
+		grid(handles.Cal_axes, 'on');
+		ylabel(handles.Cal_axes, 'dB (SPL)')
+		xlabel(handles.Cal_axes, 'Frequency (kHz)')
+		box(handles.Cal_axes, 'off');
+	end
+	guidata(hObject, handles);
+%-------------------------------------------------------------------------
+function EQ_menu_Callback(hObject, eventdata, handles)
+%---------------------------------------------
+% placeholder
+%---------------------------------------------
+	return
+%-------------------------------------------------------------------------
+function SaveEQ_menu_Callback(hObject, eventdata, handles)
+%---------------------------------------------
+% saves EQ data to .eq file (MAT file format)
+%---------------------------------------------
+	% check to make sure EQ data exist...
+	if isempty(handles.EQ.G)
+		% if not, throw error
+		errordlg('cannot save EQ data - no data to save!');
+		return
+	end
+	% get filename and path
+	[fname, fpath] = uiputfile('*.eq', 'Save equalization data to file');
+	if fname ~= 0
+		% if user didn't hit cancel button, save EQ struct in mat file
+		EQ = handles.EQ; %#ok<NASGU>
+		save(fullfile(fpath, fname), 'EQ', '-MAT');
+	end
+%-------------------------------------------------------------------------
+function LoadEQ_menu_Callback(hObject, eventdata, handles)
+%---------------------------------------------
+% loads EQ data from .eq file (MAT file format)
+%---------------------------------------------
+	[fname, fpath] = uigetfile( '*.eq', ...
+									'Load equalization data from file...');
+	if fname ~=0
+		handles.eqfile = fullfile(fpath, fname);
+		handles.EQ = load(handles.eqfile, '-MAT');
+		plot(handles.Cal_axes, ...
+				0.001*handles.EQ.caldata.freq, ...
+				handles.EQ.caldata.mag(1, :), '.-');
+		ylim(handles.Cal_axes, ...
+				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
+					1.1*max(handles.EQ.caldata.mag(1, :))]);
+		grid(handles.Cal_axes, 'on');
+		ylabel(handles.Cal_axes, 'dB (SPL)')
+		xlabel(handles.Cal_axes, 'Frequency (kHz)')
+	end
+	guidata(hObject, handles);
+%-------------------------------------------------------------------------
+%--------------------------------------------------------------------
+function WAVapply_menu_Callback(hObject, eventdata, handles)
+%---------------------------------------------
+% applies filter to WAV file
+%---------------------------------------------
+	ApplyFilterToWAV(handles.EQ)
+%--------------------------------------------------------------------
+%--------------------------------------------------------------------
+%--------------------------------------------------------------------
+
+
+
+
+
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
@@ -747,27 +795,4 @@ function SmoothVal2_edit_CreateFcn(hObject, eventdata, handles)
 		 set(hObject,'BackgroundColor','white');
 	end
 %-------------------------------------------------------------------------
-%-------------------------------------------------------------------------
-
-
-% --------------------------------------------------------------------
-function LoadCal_menu_Callback(hObject, eventdata, handles)
-% Load, plot calibration data
-	[fname, fpath] = uigetfile( {'*.cal'; '*_cal.mat'}, ...
-									'Load calibration data from file...');
-	if fname ~=0
-		handles.calfile = fullfile(fpath, fname);	
-		handles.EQ.caldata = load_headphone_cal(handles.calfile);
-		plot(handles.Cal_axes, ...
-				0.001*handles.EQ.caldata.freq, ...
-				handles.EQ.caldata.mag(1, :), '.-');
-		ylim(handles.Cal_axes, ...
-				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
-					1.1*max(handles.EQ.caldata.mag(1, :))]);
-		grid(handles.Cal_axes, 'on');
-		ylabel(handles.Cal_axes, 'dB (SPL)')
-		xlabel(handles.Cal_axes, 'Frequency (kHz)')
-		box(handles.Cal_axes, 'off');
-	end
-	guidata(hObject, handles);
 %-------------------------------------------------------------------------
