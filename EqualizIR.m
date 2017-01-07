@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 06-Jan-2017 17:22:55
+% Last Modified by GUIDE v2.5 06-Jan-2017 20:17:47
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -79,6 +79,10 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 	% 							 NOT at frequencies in f, G arrays - those are calculated
 	% 							 separately using the EQmags!
 	%			CorrectionLimit	limit to correction value in dB. if 0, no limit!
+	%			FreqLimit	limit to frequency range 
+	%								(0 if no limit, 1 if limit enabled)
+	%			FLimitMin		initially set to caldata.freq(1)
+	%			FLimitMax		initially set to caldata.freq(end)
 	% 			f			[DC:Fs/2] frequencies for full equalization spectrum
 	% 			G			[DC:Fs/2] Gain values for equalization
 	% 			A, B		denominator, numerator filter coefficients that can be 
@@ -100,6 +104,10 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 								'CalSmoothParameters', [], ...
 								'EQmags', [], ...
 								'CorrectionLimit', 0, ...
+								'FreqLimit', 0, ...
+								'FLimitMin', 0, ...
+								'FLimitMax', 125000, ...
+								'R', [], ...
 								'f', [], ...
 								'G', [], ...
 								'A', [], ...
@@ -138,6 +146,10 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 		update_ui_val(handles.CorrectionLimit_checkbox, 0);
 		disable_ui([handles.CorrectionLimit_text, handles.CorrectionLimit_edit]);
 	end
+	% freq range
+	update_ui_val(handles.LimitFreqRange_checkbox, handles.EQ.FreqLimit);
+	update_ui_str(handles.FLimitMin_edit, handles.EQ.FLimitMin);
+	update_ui_str(handles.FLimitMax_edit, handles.EQ.FLimitMax);
 	% smoothing settings
 	switch upper(handles.EQ.CalSmoothMethod)
 		case 'SAVGOL'
@@ -229,7 +241,57 @@ function SmoothVal2_edit_Callback(hObject, eventdata, handles)
 	end
 	guidata(hObject, handles)
 %-------------------------------------------------------------------------
+function LimitFreqRange_checkbox_Callback(hObject, eventdata, handles)
+	%-----------------------------------------------
+	% checks
+	%-----------------------------------------------
+	%  see if calibration data have been loaded
+	if isempty(handles.EQ.caldata)
+		errordlg('%no caldata loaded!');
+		return
+	end
+	%-----------------------------------------------
+	% update things
+	%-----------------------------------------------
+	handles.EQ.FreqLimit = read_ui_val(hObject);
+	if handles.EQ.FreqLimit
+		handles.EQ.FLimitMin = read_ui_str(handles.FLimitMin_edit, 'n');
+		handles.EQ.FLimitMax = read_ui_str(handles.FLimitMax_edit, 'n');
+	end
+	guidata(hObject, handles);
+%---------------------------------------------------------------------
+function FLimitMin_edit_Callback(hObject, eventdata, handles)
+	%-----------------------------------------------
+	% checks
+	%-----------------------------------------------
+	%  see if calibration data have been loaded
+	if isempty(handles.EQ.caldata)
+		errordlg('%no caldata loaded!');
+		return
+	end
+	%-----------------------------------------------
+	% update things
+	%-----------------------------------------------
+	handles.EQ.FLimitMin = read_ui_str(handles.FLimitMin_edit, 'n');
+	guidata(hObject, handles);
+%---------------------------------------------------------------------
+function FLimitMax_edit_Callback(hObject, eventdata, handles)
+	%-----------------------------------------------
+	% checks
+	%-----------------------------------------------
+	%  see if calibration data have been loaded
+	if isempty(handles.EQ.caldata)
+		errordlg('%no caldata loaded!');
+		return
+	end
+	%-----------------------------------------------
+	% update things
+	%-----------------------------------------------
+	handles.EQ.FLimitMax = read_ui_str(handles.FLimitMax_edit, 'n');
+	guidata(hObject, handles);
+%---------------------------------------------------------------------
 function BuildEQ_button_Callback(hObject, eventdata, handles)
+%---------------------------------------------------------------------
 %---------------------------------------------------------------------
 % Builds the equalization curve from calibration data
 %	See compensate_signal.m in TytoLogy AudioToolbox for original
@@ -268,6 +330,19 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 	hold(handles.Cal_axes, 'off');
 	legend(handles.Cal_axes, {'Raw', 'Smoothed'});
 	%---------------------------------------------------------------------
+	% limit range if necessary
+	%---------------------------------------------------------------------
+	if handles.EQ.FreqLimit
+		% need to find max, min of calibration range
+		R = find(between(	calfreqs, ...
+											handles.EQ.FLimitMin, ...
+											handles.EQ.FLimitMax) ...
+								==1);
+	else
+		% use full calibration range
+		R = 1:length(calfreqs);
+	end
+	%---------------------------------------------------------------------
 	% generate EQ curve according to selected method
 	%---------------------------------------------------------------------
 	switch upper(handles.EQ.EQMethod)
@@ -281,8 +356,8 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 		case 'BOOST'
 			% find peak magnitude, then calculate equalization values
 			% by finding deviation from peak
-			peakmag = max(smoothmags);
-			handles.EQ.EQmags = peakmag - smoothmags;
+			peakmag = max(smoothmags(R));
+			handles.EQ.EQmags = peakmag - smoothmags(R);
 			if handles.EQ.CorrectionLimit
 				handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
 																handles.EQ.CorrectionLimit);
@@ -298,8 +373,8 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 		case 'ATTEN'
 			% find lowest magnitude, then calculate equalization values
 			% by finding deviation from minimum
-			minmag = min(smoothmags);
-			handles.EQ.EQmags = minmag - smoothmags;
+			minmag = min(smoothmags(R));
+			handles.EQ.EQmags = minmag - smoothmags(R);
 			if handles.EQ.CorrectionLimit
 				handles.EQ.EQmags = limit_correction(handles.EQ.EQmags, ...
 																handles.EQ.CorrectionLimit);
@@ -325,12 +400,12 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 				%  by finding middle of dB range
 				%------------------------------------------------------
 					% find max and min in magnitude spectrum
-				maxmag = max(smoothmags);
-				minmag = min(smoothmags);
+				maxmag = max(smoothmags(R));
+				minmag = min(smoothmags(R));
 				% compute middle value
 				midmag = ((maxmag - minmag) / 2) + minmag;
 				% normalize by finding deviation from middle level
-				handles.EQ.EQmags = midmag - smoothmags;			
+				handles.EQ.EQmags = midmag - smoothmags(R);			
 				% update GUI
 				update_ui_str(handles.MiddleLevel_text, handles.EQ.TargetLevel);
 			else
@@ -338,7 +413,7 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 				% Use specified Target level to compute boost/atten
 				%------------------------------------------------------
 				handles.EQ.TargetLevel = read_ui_val(handles.EQ.TargetLevel_edit);
-				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags;
+				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags(R);
 			end
 			% Limit correction if specified
 			if handles.EQ.CorrectionLimit
@@ -352,12 +427,14 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 			return
 	end
 	% plot xfer function, storing handles to plots in handles.Corr_H
-	plot(handles.EQ_axes, 0.001*calfreqs, handles.EQ.EQmags);
+	plot(handles.EQ_axes, 0.001*calfreqs(R), handles.EQ.EQmags);
 	legend(handles.EQ_axes, sprintf('%s EQ', lower(handles.EQ.EQMethod)));
 	ylabel(handles.EQ_axes, 'Gain (db)')
 	grid(handles.EQ_axes, 'on')
 	box(handles.EQ_axes, 'off');
+	xlim(handles.EQ_axes, 0.001*[min(calfreqs) max(calfreqs)]);
 % 	set(handles.EQ_axes, 'XTickLabel', '');
+	handles.EQ.R = R;
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
 
@@ -392,7 +469,7 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	% get some parameters
 	%-----------------------------------------------	
 	% frequencies from calibration data
-	calfreqs = handles.EQ.caldata.freq;
+	calfreqs = handles.EQ.caldata.freq(handles.EQ.R);
 	%------------------------------------------------------------------------
 	% some final tidying and ...
 	%------------------------------------------------------------------------
@@ -668,10 +745,14 @@ function LoadCal_menu_Callback(hObject, eventdata, handles)
 		ylim(handles.Cal_axes, ...
 				[0.9*min(handles.EQ.caldata.mag(1, :)) ...
 					1.1*max(handles.EQ.caldata.mag(1, :))]);
+		xlim(handles.Cal_axes, 0.001*[min(handles.EQ.caldata.freq) ...
+												max(handles.EQ.caldata.freq)]);
 		grid(handles.Cal_axes, 'on');
 		ylabel(handles.Cal_axes, 'dB (SPL)')
 		xlabel(handles.Cal_axes, 'Frequency (kHz)')
 		box(handles.Cal_axes, 'off');
+		update_ui_str(handles.FLimitMin_edit, min(handles.EQ.caldata.freq));
+		update_ui_str(handles.FLimitMax_edit, max(handles.EQ.caldata.freq));
 	end
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
@@ -790,6 +871,16 @@ function SmoothVal1_edit_CreateFcn(hObject, eventdata, handles)
 		 set(hObject,'BackgroundColor','white');
 	end
 function SmoothVal2_edit_CreateFcn(hObject, eventdata, handles)
+	if ispc && isequal(get(hObject,'BackgroundColor'), ...
+								get(0,'defaultUicontrolBackgroundColor'))
+		 set(hObject,'BackgroundColor','white');
+	end
+function FLimitMin_edit_CreateFcn(hObject, eventdata, handles)
+	if ispc && isequal(get(hObject,'BackgroundColor'), ...
+								get(0,'defaultUicontrolBackgroundColor'))
+		 set(hObject,'BackgroundColor','white');
+	end
+function FLimitMax_edit_CreateFcn(hObject, eventdata, handles)
 	if ispc && isequal(get(hObject,'BackgroundColor'), ...
 								get(0,'defaultUicontrolBackgroundColor'))
 		 set(hObject,'BackgroundColor','white');
