@@ -1,4 +1,4 @@
-function ApplyFilterToWAV(EQ)
+function ApplyFilterToWAV(varargin)
 %------------------------------------------------------------------------
 % ApplyFilterToWAV
 %------------------------------------------------------------------------
@@ -63,6 +63,19 @@ specg_win = 512;
 specg_olap = 500;
 specg_fftwin = 2048;
 %------------------------------------------
+% If no input arg, load EQ data
+%------------------------------------------
+if isempty(varargin)
+	[eqname, eqpath] = uigetfile( '*.eq', 'Load .EQ file...');
+	if eqname == 0
+		return
+	else
+		EQ = load(fullfile(eqpath, eqname), '-MAT', 'EQ');
+	end
+else
+	EQ = varargin{1};
+end
+%------------------------------------------
 % load sound (wav) file
 %------------------------------------------
 [callname, callpath] = uigetfile( '*.wav', 'Load .WAV file...');
@@ -75,6 +88,7 @@ else
 end
 % get file info
 winfo = audioinfo(fullfile(callpath, callname));
+% make sure sample rates match!!!!
 if winfo.SampleRate ~= EQ.Fs
 	errordlg(sprintf( ['WAV sample rate (%d) ' ...
 							'does not match EQ sample rate (%d)'], ...
@@ -115,6 +129,7 @@ fprintf('...done in %.4f seconds\n', Tfilt);
 %------------------------------------------
 % plots
 %------------------------------------------
+%{
 % plot spectra
 fprintf('Plotting spectra...');
 fftdbplot(wdata, Fs, 7);
@@ -142,6 +157,7 @@ title(fprintf('%s: adj', adjname));
 drawnow
 Tadjspec = toc;
 fprintf('...done in %.4f seconds\n', Tadjspec);
+%}
 %------------------------------------------
 % Save file
 %------------------------------------------
@@ -150,7 +166,8 @@ fprintf('...done in %.4f seconds\n', Tadjspec);
 									'Save equalized WAV file');
 if fname ~= 0
 	% if user didn't hit cancel button, save WAV
-	audiowrite(fullfile(adjpath, adjname), 'BitsPerSample', winfo.BitsPerSample);
+	audiowrite(fullfile(adjpath, adjname), wdataf, Fs, ...
+						'BitsPerSample', winfo.BitsPerSample);
 end
 
 
