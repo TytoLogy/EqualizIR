@@ -54,4 +54,8 @@ Things to note:
 	gets amplified...
 
 %}
-%%
+%% test long noise
+flatcal = fake_caldata('freqs', 4000:1000:120000, 'calshape', 'flat');
+
+s = synmononoise_fft(30*1000, 500000, 5000, 100000, 1, flatcal);
+audiowrite('../test/noise_3s_500k.wav', 0.95*normalize(s), 500000)
