@@ -20,7 +20,7 @@ function varargout = EqualizIR(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Last Modified by GUIDE v2.5 06-Jan-2017 20:17:47
+% Last Modified by GUIDE v2.5 09-Jan-2017 17:44:43
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -96,7 +96,7 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 								'NFFT', 1024, ...
 								'NZ', 10, ...
 								'NP', 20, ...
-								'InterpMethod', 'spline', ...
+								'InterpMethod', 'linear', ...
 								'EQMethod', 'compress', ...
 								'TargetLevel', 80, ...
 								'caldata', [], ...
@@ -125,7 +125,7 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 	update_ui_str(handles.NFFT_edit, handles.EQ.NFFT);
 	update_ui_str(handles.NZ_edit, handles.EQ.NZ);
 	update_ui_str(handles.NP_edit, handles.EQ.NP);
-	update_ui_val(handles.InterpMethod_popup, 1);
+	update_ui_val(handles.InterpMethod_popup, 2);
 	update_ui_val(handles.EQMethod_popup, 1);
 	% set MiddleLevel_radiobutton value to 1 (selected)
 	update_ui_val(handles.MiddleLevel_radiobutton, 1);
@@ -168,6 +168,13 @@ function EqualizIR_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL
 			update_ui_str(handles.SmoothVal1_edit, ...
 									handles.EQ.CalSmoothParameters{2});
 	end
+	% clear plots
+	cla(handles.Cal_axes);
+	cla(handles.EQ_axes);
+	cla(handles.Filter_axes);
+	cla(handles.Desired_axes);
+	cla(handles.IR_axes);
+	cla(handles.PZ_axes);
 	%-------------------------------------------------------------
 	% Update handles structure
 	%-------------------------------------------------------------
@@ -302,7 +309,8 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 	%-----------------------------------------------
 	%  see if calibration data have been loaded
 	if isempty(handles.EQ.caldata)
-		error('%s: no caldata loaded!', mfilename)
+		errordlg('No calibration data are loaded!', mfilename)
+		return
 	end
 	%-----------------------------------------------
 	% get some parameters
@@ -461,8 +469,8 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	end	
 	% make sure Fs is going to work with calibration data
 	if handles.EQ.Fs/2 < handles.EQ.caldata.freq(end)
-		error(['%s: Signal Nyquist frequency (%d) is lower than ' ...
-				 'max calibration frequency (%d)'], ...
+		errordlg(sprintf(['Signal Nyquist frequency (%d) is lower than ' ...
+				 'max calibration frequency (%d)']), ...
 				 handles.EQ.Fs/2, handles.EQ.caldata.freq(end));
 	end
 	%-----------------------------------------------
@@ -521,10 +529,15 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 		legend({'original', 'adjusted'});
 		%}
 	end
-	% now, compute amplitude at Nyquist freq
-	nyq_amp = Gdb(NG) + Gdb_last_slope * (handles.EQ.Fs/2 - calfreqs(NG));
-	handles.EQ.G = [dc_amp, Gdb, nyq_amp]; 
-	handles.EQ.f = [0,calfreqs,handles.EQ.Fs/2];
+	% now, compute amplitude at Nyquist freq (if necessary)
+	if handles.EQ.Fs / 2 ~= calfreqs(NG)
+		nyq_amp = Gdb(NG) + Gdb_last_slope * (handles.EQ.Fs/2 - calfreqs(NG));
+		handles.EQ.G = [dc_amp, Gdb, nyq_amp];
+		handles.EQ.f = [0,calfreqs,handles.EQ.Fs/2];
+	else
+		handles.EQ.G = [dc_amp, Gdb];
+		handles.EQ.f = [0, calfreqs];
+	end
 	guidata(hObject, handles);
 	%------------------------------------------------------------------------
 	% ...compute filter
@@ -579,6 +592,7 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 	xlim(handles.IR_axes, [0 (0.5*handles.EQ.NFFT)+1]);
 
 	% plot poles and zeros
+	cla(handles.PZ_axes);
 	zplane(handles.EQ.B, handles.EQ.A, handles.PZ_axes);
 %  	axis(handles.PZ_axes, 'square')
 	xlim(handles.PZ_axes, [-1.1 1.1]);
@@ -754,6 +768,7 @@ function LoadCal_menu_Callback(hObject, eventdata, handles)
 		update_ui_str(handles.FLimitMin_edit, min(handles.EQ.caldata.freq));
 		update_ui_str(handles.FLimitMax_edit, max(handles.EQ.caldata.freq));
 	end
+	update_ui_str(handles.CalFileName_text, handles.calfile);
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
 function EQ_menu_Callback(hObject, eventdata, handles)
@@ -806,15 +821,10 @@ function WAVapply_menu_Callback(hObject, eventdata, handles)
 %---------------------------------------------
 % applies filter to WAV file
 %---------------------------------------------
-	ApplyFilterToWAV(handles.EQ)
+	ApplyFilterToWAV('EQ', handles.EQ)
 %--------------------------------------------------------------------
 %--------------------------------------------------------------------
 %--------------------------------------------------------------------
-
-
-
-
-
 
 %-------------------------------------------------------------------------
 %-------------------------------------------------------------------------
