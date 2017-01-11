@@ -332,7 +332,19 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 	% store smoothed values
 	handles.smoothmags = smoothmags;
 	guidata(hObject, handles);
-	% plot smoothed values
+% plot smoothed values
+	plot(handles.Cal_axes, ...
+			0.001*handles.EQ.caldata.freq, ...
+			handles.EQ.caldata.mag(1, :), '.-');
+	ylim(handles.Cal_axes, ...
+			[0.9*min(handles.EQ.caldata.mag(1, :)) ...
+				1.1*max(handles.EQ.caldata.mag(1, :))]);
+	xlim(handles.Cal_axes, 0.001*[min(handles.EQ.caldata.freq) ...
+											max(handles.EQ.caldata.freq)]);
+	grid(handles.Cal_axes, 'on');
+	ylabel(handles.Cal_axes, 'dB (SPL)')
+	xlabel(handles.Cal_axes, 'Frequency (kHz)')
+	box(handles.Cal_axes, 'off');	
 	hold(handles.Cal_axes, 'on');
 		plot(handles.Cal_axes, 0.001*calfreqs, smoothmags, 'r-');
 	hold(handles.Cal_axes, 'off');
@@ -434,14 +446,14 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 															handles.EQ.EQMethod));
 			return
 	end
-	% plot xfer function, storing handles to plots in handles.Corr_H
+	% plot xfer function
 	plot(handles.EQ_axes, 0.001*calfreqs(R), handles.EQ.EQmags);
 	legend(handles.EQ_axes, sprintf('%s EQ', lower(handles.EQ.EQMethod)));
 	ylabel(handles.EQ_axes, 'Gain (db)')
 	grid(handles.EQ_axes, 'on')
 	box(handles.EQ_axes, 'off');
 	xlim(handles.EQ_axes, 0.001*[min(calfreqs) max(calfreqs)]);
-% 	set(handles.EQ_axes, 'XTickLabel', '');
+	% save target range in EQ struct
 	handles.EQ.R = R;
 	guidata(hObject, handles);
 %-------------------------------------------------------------------------
@@ -511,7 +523,13 @@ function BuildFilter_button_Callback(hObject, eventdata, handles)
 		% apply correction factor...
 		Gdb(adjindx) = y.*Gdb(adjindx);
 		Gdb_last_slope = (Gdb(NG) - Gdb(NG-1)) / (calfreqs(NG) - calfreqs(NG-1));
-		% ...and plot corrected gain in EQ_axes
+		% ...and plot unadj/adj gain in EQ_axes
+		plot(handles.EQ_axes, 0.001*calfreqs(handles.EQ.R), handles.EQ.EQmags);
+		legend(handles.EQ_axes, sprintf('%s EQ', lower(handles.EQ.EQMethod)));
+		ylabel(handles.EQ_axes, 'Gain (db)')
+		grid(handles.EQ_axes, 'on')
+		box(handles.EQ_axes, 'off');
+		xlim(handles.EQ_axes, 0.001*[min(calfreqs) max(calfreqs)]);
 		hold(handles.EQ_axes, 'on');
 			plot(handles.EQ_axes, 0.001*calfreqs, Gdb, 'g.-')
 		hold(handles.EQ_axes, 'off');

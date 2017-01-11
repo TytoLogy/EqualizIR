@@ -127,6 +127,15 @@ if ~isempty(varargin)
 		end
 	end
 end
+if ~ishandle(PLOTS)
+	% if PLOTS is not a figure handle, it still might be 'y' which
+	% instructs us to create a new plot
+	if PLOTS == 'y'
+		PLOTS = figure;
+	else
+		PLOTS = 'n';
+	end
+end
 %------------------------------------------------------------------------
 % Build spectrum 
 %------------------------------------------------------------------------
@@ -160,36 +169,6 @@ switch(INTERP_METHOD)
 	otherwise
 		error('%s: %s is not yet implemented')
 end
-
-% figure
-% tmplin = interp1(fe, Gdbe, fk, 'linear');
-% tmpnear = interp1(fe, Gdbe, fk, 'nearest');
-% tmpnext = interp1(fe, Gdbe, fk, 'next');
-% tmpprev = interp1(fe, Gdbe, fk, 'previous');
-% tmppchip = interp1(fe, Gdbe, fk, 'pchip');
-% tmpcubic = interp1(fe, Gdbe, fk, 'cubic');
-% tmpv5 = interp1(fe, Gdbe, fk, 'v5cubic');
-% tmpspline = interp1(fe, Gdbe, fk, 'spline');
-% plot(	fk, Gdbfk, '.', ...
-% 		fk, tmplin, '.', ...
-% 		fk, tmpnear, '.', ...
-% 		fk, tmpnext, '.', ...
-% 		fk, tmpprev, '.', ...
-% 		fk, tmppchip, '.', ...
-% 		fk, tmpcubic, '.', ...
-% 		fk, tmpv5, '.', ...
-% 		fk, tmpspline, '.');
-% grid
-% legend({ 'defaultspline', ...
-% 			'linear', ...
-% 			'nearest', ...
-% 			'next', ...
-% 			'previous', ...
-% 			'pchip', ...
-% 			'cubic', ...
-% 			'v5cubic', ...
-% 			'spline'});
-% pause
 
 % check length of Gsbfk re: Nfft
 Ns = length(Gdbfk);
@@ -260,15 +239,6 @@ end
 %------------------------------------------------------------------------
 % Plotting if requested
 %------------------------------------------------------------------------
-if ~ishandle(PLOTS)
-	% if PLOTS is not a figure handle, it still might be 'y' which
-	% instructs us to create a new plot
-	if PLOTS == 'y'
-		PLOTS = figure;
-	else
-		PLOTS = 'n';
-	end
-end
 % if handle, plot!
 if ishandle(PLOTS)
 	% switch to or create figure
