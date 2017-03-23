@@ -432,7 +432,8 @@ function BuildEQ_button_Callback(hObject, eventdata, handles)
 				%------------------------------------------------------
 				% Use specified Target level to compute boost/atten
 				%------------------------------------------------------
-				handles.EQ.TargetLevel = read_ui_val(handles.EQ.TargetLevel_edit);
+				handles.EQ.TargetLevel = ...
+						round(read_ui_str(handles.TargetLevel_edit, 'n'));
 				handles.EQ.EQmags = handles.EQ.TargetLevel - smoothmags(R);
 			end
 			% Limit correction if specified
