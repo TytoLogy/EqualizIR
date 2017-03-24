@@ -72,6 +72,9 @@ function ApplyFilterToWAV(varargin)
 %
 % Revisions:
 %	9 Jan 2017 (SJS): added input arguments to allow comand-line use
+%	24 Mar 2015 (SJS): modified to account for older versions of Matlab
+%							 that don't have audioread/audiowrite/audioinfo
+%							 functions (use wavread/wavwrite instead)
 %------------------------------------------------------------------------
 % TO DO:
 %------------------------------------------------------------------------
@@ -154,25 +157,50 @@ end
 %------------------------------------------
 % load sound (wav) file
 %------------------------------------------
+% get file name if not provided
 if isempty(wavname)
 	[wavname, wavpath] = uigetfile( '*.wav', 'Load .WAV file...');
 	if wavname == 0
 		return
 	end
 end
-% get file info
-winfo = audioinfo(fullfile(wavpath, wavname));
-% make sure sample rates match!!!!
-if winfo.SampleRate ~= EQ.Fs
-	errordlg(sprintf( ['WAV sample rate (%d) ' ...
-							'does not match EQ sample rate (%d)'], ...
-							winfo.SampleRate, EQ.Fs));
-	return
+% check if audioread is valid function
+if exist('audioread') %#ok<*EXIST>
+	% get file info
+	winfo = audioinfo(fullfile(wavpath, wavname));
+	% make sure sample rates match!!!!
+	if winfo.SampleRate ~= EQ.Fs
+		errordlg(sprintf( ['WAV sample rate (%d) ' ...
+								'does not match EQ sample rate (%d)'], ...
+								winfo.SampleRate, EQ.Fs));
+		return
+	end
+	% load file
+	fprintf('Loading WAV file %s ... \n', fullfile(wavpath, wavname));
+	[wdata, Fs] = audioread(fullfile(wavpath, wavname), 'native');
+	fprintf('...done.\n');
+else
+	% no audioread, so use wavread
+	[wdata, Fs, nbits, opts] = wavread(fullfile(wavpath, wavname)); %#ok<DWVRD>
+	% make sure sample rates match!!!!
+	if Fs ~= EQ.Fs
+		errordlg(sprintf( ['WAV sample rate (%d) ' ...
+								'does not match EQ sample rate (%d)'], ...
+								Fs, EQ.Fs));
+		return
+	end
+	% assign values to winfo
+	winfo = struct(	'Filename', fullfile(wavpath, wavname), ...
+							'CompressionMethod', 'Uncompressed', ...
+							'NumChannels', min(size(wdata)), ...
+							'SampleRate', Fs, ...
+							'TotalSamples', length(wdata), ...
+							'Duration', Fs*length(wdata), ...
+							'Title', [], ...
+							'Comment', opts, ...
+							'Artist', [], ...
+							'BitsPerSample', nbits	);
 end
-% load file
-fprintf('Loading WAV file %s ... \n', fullfile(wavpath, wavname));
-[wdata, Fs] = audioread(fullfile(wavpath, wavname), 'native');
-fprintf('...done.\n');
 % need wdata to be a row vector for some future functions to work
 if ~isrow(wdata)
 	wdata = wdata';
@@ -265,5 +293,11 @@ end
 %------------------------------------------
 % if user didn't hit cancel button, save WAV at original sample rate and
 % bitdepth
-audiowrite(fullfile(adjpath, adjname), wdataf, Fs, ...
-						'BitsPerSample', winfo.BitsPerSample);
+% check if audiowrite exists
+if exist('audiowrite')
+	audiowrite(fullfile(adjpath, adjname), wdataf, Fs, ...
+							'BitsPerSample', winfo.BitsPerSample);
+else
+	wavwrite(wdataf, Fs, winfo.BitsPerSample, fullfile(adjpath, adjname)); %#ok<DWVWR>
+end
+
